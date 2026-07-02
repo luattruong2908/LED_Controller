@@ -8,7 +8,15 @@
       "Read(//c/Users/luatt/.platformio/packages/framework-arduinoespressif32/**)",
       "Read(//c/Users/luatt/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_system/include/**)",
       "PowerShell(git init -b main)",
-      "PowerShell(git add -A)"
+      "PowerShell(git add -A)",
+      "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run -e esp32dev)",
+      "Bash(git -C /d/PlatformIO/Projects/Imodel_1 remote -v)",
+      "Bash(git check-ignore *)",
+      "Bash(node -e ' *)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'Fix MQTT echo race and empty-payload handling in controller app *)",
+      "Bash(git remote *)",
+      "Bash(git push *)"
     ]
   }
 }

@@ -877,10 +877,16 @@
           const m = topic.match(/house_(\d+)$/); if (!m) return;
           const b = +m[1];
           if (b !== 0 && b !== 1) return;
-          let v; try { v = BigInt(msg.toString()); } catch (e) { return; }
+          const s = msg.toString().trim();
+          if (!s) return; // payload rỗng (retained bị xoá) -> bỏ qua, không hiểu nhầm thành 0
+          let v; try { v = BigInt(s); } catch (e) { return; }
           if (v < 0n || v > RANGE_MAX) return;
           syncedBoards.add(b);
           if (syncedBoards.size === 2 && !stateReady) { stateReady = true; clearTimeout(readyTimer); }
+          // Board này đang chờ debounce publish: message đến lúc này là echo của
+          // state cũ do chính app gửi (broker dội lại vì mình cũng subscribe topic
+          // này). Áp vào sẽ ghi đè các toggle vừa bấm chưa kịp gửi -> bỏ qua.
+          if (pubTimers[b]) return;
           if (board[b] !== v) { board[b] = v; refreshAll(); }
         });
         client.on('error', e => toast('MQTT: ' + e.message, 'err'));
