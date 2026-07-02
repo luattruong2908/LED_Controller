@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(~/.platformio/penv/Scripts/pio.exe run *)",
+      "Read(//c/Users/luatt/.platformio/platforms/**)",
+      "Read(//c/Users/luatt/.platformio/packages/**)",
+      "Read(//c/Users/luatt/.platformio/platforms/espressif32/**)",
+      "Read(//c/Users/luatt/.platformio/packages/framework-arduinoespressif32/**)",
+      "Read(//c/Users/luatt/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_system/include/**)",
+      "PowerShell(git init -b main)",
+      "PowerShell(git add -A)"
+    ]
+  }
+}

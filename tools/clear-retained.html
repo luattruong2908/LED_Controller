@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Xóa retained messages — diorama/imodel</title>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<style>
+  body{font-family:system-ui,Segoe UI,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;color:#1a1a1a}
+  h1{font-size:18px}
+  .row{display:flex;gap:8px;align-items:center;margin:12px 0}
+  input{flex:1;padding:8px;border:1px solid #ccc;border-radius:6px;font-family:monospace}
+  button{padding:9px 16px;border:0;border-radius:6px;background:#c0392b;color:#fff;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  #log{background:#111;color:#0f0;font-family:monospace;font-size:12px;padding:12px;border-radius:8px;height:320px;overflow:auto;white-space:pre-wrap}
+  .warn{color:#e67e22}
+</style>
+</head>
+<body>
+  <h1>Xóa tất cả retained messages</h1>
+  <div class="row">
+    <label>Topic filter:</label>
+    <input id="topic" value="diorama/imodel/#">
+  </div>
+  <p style="font-size:13px;color:#555">Để <code>diorama/imodel/#</code> để xóa mọi retain của dự án này (house + random + status), hoặc <code>#</code> để xóa TẤT CẢ retain trên broker.</p>
+  <div class="row">
+    <button id="go">🗑️  Kết nối &amp; xóa hết retained</button>
+  </div>
+  <div id="log"></div>
+
+<script>
+  // Giống app/www/index.html — cùng broker, cùng user/pass.
+  const BROKER = 'wss://od51161c.ala.asia-southeast1.emqxsl.com:8084/mqtt';
+  const USER = 'imodel_1', PASS = 'goku@2025';
+  const COLLECT_MS = 3000; // thời gian gom retained trước khi kết thúc
+
+  const logEl = document.getElementById('log');
+  const log = (m, cls) => {
+    const line = document.createElement('div');
+    if (cls) line.className = cls;
+    line.textContent = m;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  };
+
+  document.getElementById('go').onclick = () => {
+    const btn = document.getElementById('go');
+    const filter = document.getElementById('topic').value.trim();
+    btn.disabled = true;
+    logEl.innerHTML = '';
+    log('Đang kết nối ' + BROKER + ' …');
+
+    const client = mqtt.connect(BROKER, {
+      username: USER, password: PASS,
+      clientId: 'retained-cleaner-' + Math.random().toString(16).slice(2),
+      clean: true, reconnectPeriod: 0,
+    });
+
+    const cleared = new Set();
+    let done = false;
+
+    client.on('connect', () => {
+      log('✓ Đã kết nối. Subscribe: ' + filter);
+      client.subscribe(filter, { qos: 1 }, err => {
+        if (err) { log('✗ Lỗi subscribe: ' + err.message, 'warn'); finish(); return; }
+        log('Đang gom retained message trong ' + (COLLECT_MS/1000) + 's …');
+        setTimeout(finish, COLLECT_MS);
+      });
+    });
+
+    client.on('message', (topic, payload, packet) => {
+      // Chỉ xử lý retained thật sự, payload > 0 (payload rỗng = đã bị xóa).
+      if (!packet.retain || payload.length === 0) return;
+      if (cleared.has(topic)) return;
+      cleared.add(topic);
+      // Payload rỗng + retain=true => xóa retained message của topic này.
+      client.publish(topic, '', { qos: 1, retain: true });
+      log('  xóa → ' + topic);
+    });
+
+    client.on('error', e => log('✗ ' + e.message, 'warn'));
+
+    function finish() {
+      if (done) return;
+      done = true;
+      log('');
+      log('✓ Xong. Đã xóa ' + cleared.size + ' retained topic.');
+      // Chờ các publish rỗng gửi đi rồi đóng.
+      setTimeout(() => { client.end(true); btn.disabled = false; }, 800);
+    }
+  };
+</script>
+</body>
+</html>

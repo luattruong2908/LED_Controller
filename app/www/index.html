@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="description" content="Điều khiển chiếu sáng sa bàn qua MQTT" />
+  <title>Diorama</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Montserrat:wght@300;400;500;600&display=swap"
+    rel="stylesheet" />
+  <style>
+    *,
+    *::before,
+    *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      scrollbar-width: none;
+    }
+
+    ::-webkit-scrollbar {
+      display: none;
+    }
+
+    :root {
+      --bg: #ffffff;
+      --bg-sub: #fdfbf7;
+      /* Light cream */
+      --bg-card: #ffffff;
+      --bg-toggle-off: #e6e4de;
+      --border: #f0ebe1;
+      --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.08);
+
+      --text-900: #1a1714;
+      --text-700: #3b352f;
+      --text-500: #7a7063;
+      --text-400: #9e9382;
+
+      --gold: #d4af37;
+      --gold-dark: #b5952f;
+      --gold-light: #fef9e7;
+      --gold-glow: rgba(212, 175, 55, 0.2);
+
+      --green: #10b981;
+      --green-light: #ecfdf5;
+      --green-glow: rgba(16, 185, 129, 0.2);
+      --red: #ef4444;
+
+      --radius: 16px;
+      --radius-sm: 12px;
+      --radius-xs: 8px;
+    }
+
+    html {
+      font-family: 'Montserrat', sans-serif;
+      background: var(--bg-sub);
+      color: var(--text-700);
+      -webkit-tap-highlight-color: transparent;
+      -webkit-font-smoothing: antialiased;
+      height: 100%;
+    }
+
+    body {
+      height: 100%;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      /* Prevent vertical scrolling on body */
+    }
+
+    /* HEADER */
+    .header {
+      flex-shrink: 0;
+      background: #C5AA85;
+      border-bottom: 1px solid var(--border);
+      z-index: 100;
+    }
+
+    .header-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    /* Settings Button & Popover */
+    .settings-area {
+      position: relative;
+    }
+
+    .btn-settings {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .btn-settings:hover {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.5);
+    }
+
+    .btn-settings svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .settings-dot {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 2px solid var(--bg);
+      transition: background 0.3s ease;
+    }
+
+    .settings-dot.online {
+      background: var(--green);
+    }
+
+    .settings-dot.offline {
+      background: var(--red);
+    }
+
+    .settings-pop {
+      position: absolute;
+      top: calc(100% + 12px);
+      right: 0;
+      width: 260px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow-pop);
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-8px);
+      transition: all 0.2s ease;
+      z-index: 200;
+    }
+
+    .settings-pop.open {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .pop-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+    }
+
+    .pop-label {
+      font-size: 13px;
+      color: var(--text-500);
+      font-weight: 500;
+    }
+
+    .pop-value {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .pop-value.on {
+      color: var(--green);
+    }
+
+    .pop-value.off {
+      color: var(--red);
+    }
+
+    .pop-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 8px 0;
+    }
+
+    .btn-reconnect {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: var(--radius-xs);
+      background: var(--gold-light);
+      color: var(--gold-dark);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      margin-top: 4px;
+    }
+
+    .btn-reconnect:hover {
+      background: #fde68a;
+    }
+
+    /* MASTER PANEL (pinned above the scrolling grid) */
+    .master-panel {
+      flex-shrink: 0;
+      max-width: 960px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 14px 20px 4px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+    }
+
+    .master-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--gold);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 16px var(--gold-glow);
+      cursor: pointer;
+      -webkit-user-select: none;
+      user-select: none;
+      transition: all 0.2s ease;
+    }
+
+    .master-row:active {
+      transform: scale(0.99);
+    }
+
+    .master-row.landscape {
+      border-color: var(--green);
+      box-shadow: 0 4px 16px var(--green-glow);
+    }
+
+    .master-label {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .master-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--gold-light);
+      color: var(--gold-dark);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .master-row.landscape .master-icon {
+      background: var(--green-light);
+      color: var(--green);
+    }
+
+    .master-text {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-900);
+    }
+
+    /* SCROLLABLE CONTENT */
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      max-width: 960px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 8px 16px 32px;
+    }
+
+    /* HOUSE GRID */
+    .rooms-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+      gap: 10px;
+    }
+
+    .room-card {
+      background: var(--bg-sub);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .room-card.on {
+      background: var(--gold-light);
+      border-color: var(--gold);
+      box-shadow: 0 4px 12px var(--gold-glow);
+    }
+
+    .room-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-400);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+      transition: all 0.2s ease;
+    }
+
+    .room-card.on .room-icon {
+      color: var(--gold-dark);
+      box-shadow: 0 2px 8px var(--gold-glow);
+    }
+
+    .room-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-500);
+      transition: color 0.2s ease;
+      text-align: center;
+    }
+
+    .room-card.on .room-name {
+      color: var(--text-900);
+    }
+
+    /* Landscape card — green accent to set it apart from houses */
+    .room-card.landscape {
+      grid-column: 1 / -1;
+    }
+
+    .room-card.landscape.on {
+      background: var(--green-light);
+      border-color: var(--green);
+      box-shadow: 0 4px 12px var(--green-glow);
+    }
+
+    .room-card.landscape.on .room-icon {
+      color: var(--green);
+      box-shadow: 0 2px 8px var(--green-glow);
+    }
+
+    .section-label {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-700);
+      margin: 4px 2px 12px;
+    }
+
+    /* TOGGLE */
+    .toggle {
+      position: relative;
+      width: 48px;
+      height: 28px;
+      flex-shrink: 0;
+      cursor: pointer;
+      border: none;
+      background: none;
+      padding: 0;
+    }
+
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      border-radius: 100px;
+      background: var(--bg-toggle-off);
+      transition: all 0.3s ease;
+    }
+
+    .toggle-thumb {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #fff;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .toggle.on .toggle-track {
+      background: var(--gold);
+      box-shadow: 0 0 12px var(--gold-glow);
+    }
+
+    .toggle.on .toggle-thumb {
+      left: 23px;
+    }
+
+    .master-row.landscape .toggle.on .toggle-track {
+      background: var(--green);
+      box-shadow: 0 0 12px var(--green-glow);
+    }
+
+    /* RANDOM master row — violet accent to set it apart */
+    .master-row.random {
+      border-color: #8b5cf6;
+      box-shadow: 0 4px 16px rgba(139, 92, 246, 0.18);
+    }
+
+    .master-row.random .master-icon {
+      background: #f5f3ff;
+      color: #7c3aed;
+    }
+
+    .master-row.random .toggle.on .toggle-track {
+      background: #8b5cf6;
+      box-shadow: 0 0 12px rgba(139, 92, 246, 0.28);
+    }
+
+    /* Khi random đang chạy, board tự điều khiển nhà -> làm mờ lưới cho rõ */
+    body.random-on .content {
+      opacity: 0.5;
+      transition: opacity 0.3s ease;
+    }
+
+    /* TOAST */
+    .toast-box {
+      position: fixed;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .toast {
+      padding: 12px 24px;
+      border-radius: 30px;
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      animation: toastIn 0.3s ease, toastOut 0.3s ease 2s forwards;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .toast.ok {
+      background: #fef9e7;
+      color: #b5952f;
+      border: 1px solid #fde68a;
+    }
+
+    .toast.err {
+      background: #fee2e2;
+      color: #b91c1c;
+      border: 1px solid #fca5a5;
+    }
+
+    .toast.info {
+      background: #ffffff;
+      color: var(--text-700);
+      border: 1px solid var(--border);
+    }
+
+    @keyframes toastIn {
+      from {
+        opacity: 0;
+        transform: translateY(-16px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes toastOut {
+      from {
+        opacity: 1;
+      }
+
+      to {
+        opacity: 0;
+        transform: translateY(-16px);
+      }
+    }
+
+    /* LOADING SCENE */
+    .loading-scene {
+      position: fixed;
+      inset: 0;
+      background: #C5AA85;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.5s ease, visibility 0.5s ease;
+    }
+
+    .loading-scene.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .loading-content {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .btn-start {
+      padding: 14px 40px;
+      border-radius: 30px;
+      background: #ffffff;
+      color: #C5AA85;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+      transition: all 0.2s ease;
+    }
+
+    .btn-start:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="loading-scene" class="loading-scene">
+    <div class="loading-content">
+      <button class="btn-start" onclick="startApp()">Bắt đầu</button>
+    </div>
+  </div>
+
+  <header class="header">
+    <div class="header-inner">
+      <div class="settings-area">
+        <button class="btn-settings" id="btnSettings" onclick="toggleSettings()">
+          <span class="settings-dot offline" id="settingsDot"></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+        <div class="settings-pop" id="settingsPop">
+          <div class="pop-row">
+            <span class="pop-label">Trạng thái</span>
+            <span class="pop-value off" id="popStatus">Đang kết nối…</span>
+          </div>
+          <div class="pop-row">
+            <span class="pop-label">Broker</span>
+            <span class="pop-value" style="color:var(--text-400);font-size:11px;">emqxsl.com:8084</span>
+          </div>
+          <div class="pop-row">
+            <span class="pop-label">Board 0 (nhà 1–40)</span>
+            <span class="pop-value" id="popB0" style="color:var(--text-400);">—</span>
+          </div>
+          <div class="pop-row">
+            <span class="pop-label">Board 1 (41–58 + LS)</span>
+            <span class="pop-value" id="popB1" style="color:var(--text-400);">—</span>
+          </div>
+          <div class="pop-divider"></div>
+          <button class="btn-reconnect" onclick="reconnectMQTT()">🔄 Kết nối lại</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MASTER CONTROLS -->
+  <div class="master-panel">
+    <div class="master-row" id="row-project" onclick="toggleProject()">
+      <div class="master-label">
+        <span class="master-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15 9 22 9.5 17 14 18.5 21 12 17.5 5.5 21 7 14 2 9.5 9 9 12 2"/></svg>
+        </span>
+        <span class="master-text">Cả dự án</span>
+      </div>
+      <div class="toggle" id="m-project"><span class="toggle-track"></span><span class="toggle-thumb"></span></div>
+    </div>
+
+    <div class="master-row" id="row-houses" onclick="toggleAllHouses()">
+      <div class="master-label">
+        <span class="master-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5"/><path d="M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10"/><path d="M9 21v-6h6v6"/></svg>
+        </span>
+        <span class="master-text">Tất cả nhà</span>
+      </div>
+      <div class="toggle" id="m-houses"><span class="toggle-track"></span><span class="toggle-thumb"></span></div>
+    </div>
+
+    <div class="master-row landscape" id="row-landscape" onclick="toggleLandscape()">
+      <div class="master-label">
+        <span class="master-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 6 9h3l-3 4h3l-3 4h12l-3-4h3l-3-4h3z"/><path d="M12 22v-4"/></svg>
+        </span>
+        <span class="master-text">Landscape</span>
+      </div>
+      <div class="toggle" id="m-landscape"><span class="toggle-track"></span><span class="toggle-thumb"></span></div>
+    </div>
+
+    <div class="master-row random" id="row-random" onclick="toggleRandom()">
+      <div class="master-label">
+        <span class="master-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1.3" fill="currentColor" stroke="none"/></svg>
+        </span>
+        <span class="master-text">Ngẫu nhiên</span>
+      </div>
+      <div class="toggle" id="m-random"><span class="toggle-track"></span><span class="toggle-thumb"></span></div>
+    </div>
+  </div>
+
+  <!-- HOUSE GRID -->
+  <div class="content">
+    <div class="section-label" id="sectionLabel">Các căn nhà</div>
+    <div class="rooms-grid" id="grid">
+      <!-- RENDERED BY JS -->
+    </div>
+  </div>
+
+  <div class="toast-box" id="toastBox"></div>
+
+  <script src="mqtt.min.js"></script>
+  <script>
+    window.startApp = () => {
+      document.getElementById('loading-scene').classList.add('hidden');
+    };
+    (() => {
+      'use strict';
+
+      const BROKER = 'wss://od51161c.ala.asia-southeast1.emqxsl.com:8084/mqtt';
+      const USER = 'imodel_1', PASS = 'goku@2025';
+      const PREFIX = 'diorama/imodel/house_';   // house_0 = board 0, house_1 = board 1
+      const RANDOM_TOPIC = 'diorama/imodel/random'; // '1' = bật random ở firmware, '0' = tắt
+      const STATUS_PREFIX = 'diorama/imodel/status_'; // retained '1' = board online, LWT '0' = board rớt
+
+      /* ── Layout mapping ──────────────────────────────────────────
+         58 nhà + 1 cảnh quan, chia trên 2 board (địa chỉ DIP 0 và 1):
+           Board 0 : nhà 1..40          -> bit 0..39
+           Board 1 : nhà 41..58         -> bit 0..17
+                     cảnh quan          -> bit 18
+      */
+      const HOUSE_COUNT = 58;
+      const B0_HOUSES = 40;                 // nhà 1..40 nằm ở board 0
+      const B1_HOUSES = HOUSE_COUNT - B0_HOUSES; // 18 nhà (41..58) ở board 1
+      const LS_BIT = B1_HOUSES;             // cảnh quan = bit ngay sau các nhà của board 1 (bit 18)
+
+      const BOARD_BITS = 40;                // mỗi board xuất 40 bit qua thanh ghi dịch
+      const B0_HOUSE_MASK = (1n << BigInt(B0_HOUSES)) - 1n; // 40 bit thấp
+      const B1_HOUSE_MASK = (1n << BigInt(B1_HOUSES)) - 1n; // 18 bit thấp
+      const LS_MASK = 1n << BigInt(LS_BIT);                 // bit cảnh quan
+      const B1_FULL_MASK = B1_HOUSE_MASK | LS_MASK;         // 19 bit của board 1
+      const RANGE_MAX = (1n << BigInt(BOARD_BITS)) - 1n;    // giới hạn hợp lệ mỗi board
+
+      // Trạng thái từng board (giá trị publish lên MQTT).
+      const board = { 0: 0n, 1: 0n };
+      let client = null, connected = false;
+      let randomActive = false;   // chế độ ngẫu nhiên do firmware chạy
+
+      // Chỉ mở khoá điều khiển sau khi đã nhận retained state của cả 2 board
+      // (hoặc hết 1.5s — broker mới chưa có retained). Tránh việc bấm ngay khi
+      // vừa kết nối làm publish state rỗng đè lên state thật trên broker.
+      let stateReady = false, readyTimer = null;
+      const syncedBoards = new Set();
+
+      // nhà h (1..58) -> {b: board, bit}
+      function loc(h) {
+        if (h <= B0_HOUSES) return { b: 0, bit: h - 1 };
+        return { b: 1, bit: h - 1 - B0_HOUSES };
+      }
+      const houseOn = h => { const { b, bit } = loc(h); return ((board[b] >> BigInt(bit)) & 1n) === 1n; };
+      const landscapeOn = () => ((board[1] >> BigInt(LS_BIT)) & 1n) === 1n;
+      const allHousesOn = () =>
+        board[0] === B0_HOUSE_MASK && (board[1] & B1_HOUSE_MASK) === B1_HOUSE_MASK;
+      const projectOn = () => allHousesOn() && landscapeOn();
+
+      /* ── Settings popover ── */
+      window.toggleSettings = () => document.getElementById('settingsPop').classList.toggle('open');
+      document.addEventListener('click', e => {
+        if (!document.querySelector('.settings-area')?.contains(e.target))
+          document.getElementById('settingsPop').classList.remove('open');
+      });
+
+      /* ── Render ── */
+      const HOUSE_SVG = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5"/><path d="M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10"/><path d="M9 21v-6h6v6"/></svg>`;
+
+      function render() {
+        const grid = document.getElementById('grid');
+        let html = '';
+        for (let h = 1; h <= HOUSE_COUNT; h++) {
+          html += `
+            <div class="room-card${houseOn(h) ? ' on' : ''}" id="house-${h}" onclick="toggleHouse(${h})">
+              <div class="room-icon">${HOUSE_SVG}</div>
+              <span class="room-name">Nhà ${h}</span>
+            </div>`;
+        }
+        grid.innerHTML = html;
+      }
+
+      function setToggle(id, on) {
+        const el = document.getElementById(id);
+        if (el) el.className = 'toggle' + (on ? ' on' : '');
+      }
+
+      function refreshHouse(h) {
+        const el = document.getElementById('house-' + h);
+        if (el) el.className = 'room-card' + (houseOn(h) ? ' on' : '');
+      }
+
+      function refreshMasters() {
+        setToggle('m-project', projectOn());
+        setToggle('m-houses', allHousesOn());
+        setToggle('m-landscape', landscapeOn());
+      }
+
+      function refreshRandom() {
+        setToggle('m-random', randomActive);
+        document.body.classList.toggle('random-on', randomActive);
+      }
+
+      function refreshAll() {
+        for (let h = 1; h <= HOUSE_COUNT; h++) refreshHouse(h);
+        refreshMasters();
+      }
+
+      /* ── Controls ── */
+      // Chặn thao tác khi mất kết nối: tránh UI đổi trạng thái trong khi
+      // board thật không nhận được lệnh (state sẽ lệch cho tới lần publish kế tiếp).
+      // Chặn thêm lúc chưa đồng bộ retained state (stateReady).
+      function canControl() {
+        if (!connected) { toast('Chưa kết nối MQTT!', 'err'); return false; }
+        if (!stateReady) { toast('Đang đồng bộ trạng thái…', 'info'); return false; }
+        return true;
+      }
+
+      window.toggleHouse = h => {
+        if (!canControl()) return;
+        cancelRandom();
+        const { b, bit } = loc(h);
+        board[b] ^= (1n << BigInt(bit));
+        refreshHouse(h); refreshMasters(); publish(b);
+      };
+
+      window.toggleLandscape = () => {
+        if (!canControl()) return;
+        cancelRandom();
+        board[1] ^= LS_MASK;
+        refreshMasters(); publish(1);
+      };
+
+      window.toggleAllHouses = () => {
+        if (!canControl()) return;
+        cancelRandom();
+        const on = allHousesOn();
+        if (on) { board[0] = 0n; board[1] &= ~B1_HOUSE_MASK; }   // giữ nguyên cảnh quan
+        else { board[0] = B0_HOUSE_MASK; board[1] |= B1_HOUSE_MASK; }
+        refreshAll(); publish(0); publish(1);
+        toast(on ? 'Đã tắt tất cả nhà' : 'Đã bật tất cả nhà', on ? 'info' : 'ok');
+      };
+
+      window.toggleProject = () => {
+        if (!canControl()) return;
+        cancelRandom();
+        const on = projectOn();
+        if (on) { board[0] = 0n; board[1] = 0n; }
+        else { board[0] = B0_HOUSE_MASK; board[1] = B1_FULL_MASK; }
+        refreshAll(); publish(0); publish(1);
+        toast(on ? 'Đã tắt cả dự án' : 'Đã bật cả dự án', on ? 'info' : 'ok');
+      };
+
+      /* ── Chế độ ngẫu nhiên ──
+         Firmware tự chạy hiệu ứng random (fade PWM) khi nhận RANDOM_TOPIC='1'.
+         App chỉ gửi 1 lệnh bật/tắt; mọi nút khác sẽ tự huỷ random trước khi hoạt động. */
+      function publishRandom(on) {
+        if (!client || !connected) return;
+        client.publish(RANDOM_TOPIC, on ? '1' : '0', { qos: 1, retain: true });
+      }
+
+      // Huỷ random khi người dùng bấm bất kỳ nút điều khiển nào khác.
+      function cancelRandom() {
+        if (!randomActive) return;
+        randomActive = false;
+        publishRandom(false);
+        refreshRandom();
+      }
+
+      window.toggleRandom = () => {
+        if (!canControl()) return;
+        randomActive = !randomActive;
+        publishRandom(randomActive);
+        refreshRandom();
+        toast(randomActive ? 'Ngẫu nhiên: BẬT ✨' : 'Ngẫu nhiên: TẮT', randomActive ? 'ok' : 'info');
+      };
+
+      /* ── MQTT ── */
+      // Gộp các lần bấm liên tiếp: chỉ gửi trạng thái MỚI NHẤT sau khi ngưng bấm,
+      // tránh dội bom message lên broker/ESP. Không mất mát vì luôn publish state
+      // tuyệt đối (cả bitmask board đã tích luỹ mọi toggle), không phải lệnh delta.
+      const PUBLISH_DEBOUNCE_MS = 150;
+      const pubTimers = { 0: null, 1: null };
+      function publish(b) {
+        if (!client || !connected) { toast('Chưa kết nối MQTT!', 'err'); return; }
+        if (pubTimers[b]) clearTimeout(pubTimers[b]);
+        pubTimers[b] = setTimeout(() => {
+          pubTimers[b] = null;
+          if (!client || !connected) return;
+          client.publish(PREFIX + b, board[b].toString(), { qos: 1, retain: true });
+        }, PUBLISH_DEBOUNCE_MS);
+      }
+
+      function connectMQTT() {
+        setConn(false, 'Đang kết nối…');
+        try {
+          client = mqtt.connect(BROKER, {
+            username: USER, password: PASS,
+            clientId: 'diorama_' + Math.random().toString(36).slice(2, 10),
+            clean: true, connectTimeout: 8000, reconnectPeriod: 5000,
+          });
+        } catch (e) { setConn(false, 'Lỗi'); toast(e.message, 'err'); return; }
+
+        client.on('connect', () => {
+          connected = true; setConn(true, 'Đã kết nối');
+          toast('Kết nối MQTT thành công!', 'ok');
+          stateReady = false; syncedBoards.clear();
+          clearTimeout(readyTimer);
+          readyTimer = setTimeout(() => { stateReady = true; }, 1500);
+          [0, 1].forEach(b => {
+            client.subscribe(PREFIX + b, { qos: 1 });
+            client.subscribe(STATUS_PREFIX + b, { qos: 1 });
+          });
+          client.subscribe(RANDOM_TOPIC, { qos: 1 });
+        });
+        client.on('message', (topic, msg) => {
+          // Đồng bộ trạng thái random giữa nhiều máy.
+          if (topic === RANDOM_TOPIC) {
+            const on = msg.toString() === '1';
+            if (randomActive !== on) { randomActive = on; refreshRandom(); }
+            return;
+          }
+          // Trạng thái online/offline của board (LWT từ firmware).
+          const sm = topic.match(/status_(\d+)$/);
+          if (sm) {
+            const b = +sm[1];
+            if (b === 0 || b === 1) setBoardStatus(b, msg.toString() === '1');
+            return;
+          }
+          const m = topic.match(/house_(\d+)$/); if (!m) return;
+          const b = +m[1];
+          if (b !== 0 && b !== 1) return;
+          let v; try { v = BigInt(msg.toString()); } catch (e) { return; }
+          if (v < 0n || v > RANGE_MAX) return;
+          syncedBoards.add(b);
+          if (syncedBoards.size === 2 && !stateReady) { stateReady = true; clearTimeout(readyTimer); }
+          if (board[b] !== v) { board[b] = v; refreshAll(); }
+        });
+        client.on('error', e => toast('MQTT: ' + e.message, 'err'));
+        client.on('close', () => {
+          connected = false; setConn(false, 'Mất kết nối');
+          setBoardStatus(0, null); setBoardStatus(1, null);   // mất broker -> không rõ board sống hay chết
+        });
+        client.on('reconnect', () => setConn(false, 'Đang kết nối lại…'));
+      }
+
+      window.reconnectMQTT = () => {
+        if (client) { try { client.end(true); } catch (e) { } client = null; }
+        connected = false; toast('Đang kết nối lại…', 'info');
+        setTimeout(connectMQTT, 300);
+        document.getElementById('settingsPop').classList.remove('open');
+      };
+
+      // on = true/false = board online/offline; null = không xác định (app mất broker).
+      function setBoardStatus(b, on) {
+        const el = document.getElementById('popB' + b);
+        if (!el) return;
+        if (on === null) {
+          el.className = 'pop-value';
+          el.style.color = 'var(--text-400)';
+          el.textContent = '—';
+        } else {
+          el.style.color = '';
+          el.className = 'pop-value ' + (on ? 'on' : 'off');
+          el.textContent = on ? 'Online' : 'Offline';
+        }
+      }
+
+      function setConn(on, text) {
+        document.getElementById('settingsDot').className = 'settings-dot ' + (on ? 'online' : 'offline');
+        const v = document.getElementById('popStatus');
+        v.className = 'pop-value ' + (on ? 'on' : 'off'); v.textContent = text;
+      }
+
+      function toast(msg, type = 'info') {
+        const el = document.createElement('div');
+        el.className = 'toast ' + type; el.textContent = msg;
+        document.getElementById('toastBox').appendChild(el);
+        setTimeout(() => el.remove(), 2500);
+      }
+
+      render();
+      refreshMasters();
+      refreshRandom();
+      connectMQTT();
+    })();
+  </script>
+</body>
+
+</html>
