@@ -817,6 +817,9 @@
       window.toggleRandom = () => {
         if (!canControl()) return;
         randomActive = !randomActive;
+        // Bật random -> mặc định bật luôn Landscape (khớp quy tắc bên firmware),
+        // publish lại mask board 1 để UI và retained state nhất quán với đèn thật.
+        if (randomActive && !landscapeOn()) { board[1] |= LS_MASK; refreshMasters(); publish(1); }
         publishRandom(randomActive);
         refreshRandom();
         toast(randomActive ? 'Ngẫu nhiên: BẬT ✨' : 'Ngẫu nhiên: TẮT', randomActive ? 'ok' : 'info');

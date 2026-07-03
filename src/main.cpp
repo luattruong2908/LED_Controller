@@ -43,12 +43,15 @@ const char* MQTT_PASS   = "goku@2025";
 
 // PWM mềm (so sánh tuyến tính) để đèn sáng/tắt mượt bằng thanh ghi dịch.
 //   - Bật/tắt thường: duty = 0 hoặc PWM_LEVELS (giữ nguyên hành vi cũ y hệt).
-//   - Chế độ random: mỗi nhà tự fade in/out độc lập.
+//   - Chế độ random: mỗi 8s chọn ngẫu nhiên nhóm nhà sáng/tắt, fade mượt khi đổi nhóm.
 #define PWM_LEVELS          64                    // số mức sáng (duty 0..64) — PHẢI là luỹ thừa của 2
 #define PWM_FRAME_HZ        120                   // tần số quét khung hình
 static_assert((PWM_LEVELS & (PWM_LEVELS - 1)) == 0, "PWM_LEVELS phai la luy thua cua 2 (mask trong ISR)");
 #define PWM_TICK_US         (1000000UL / ((unsigned long)PWM_LEVELS * PWM_FRAME_HZ))
 #define ANIM_STEP_MS        33                    // nhịp cập nhật hiệu ứng (~30fps)
+#define ANIM_CYCLE_MS       8000                  // chu kỳ random: mỗi 8s đổi nhóm nhà sáng/tắt
+#define ANIM_FADE_MS        2000                  // thời gian fade khi đổi nhóm (~2s)
+#define ANIM_FADE_STEP      (255 * ANIM_STEP_MS / ANIM_FADE_MS)   // mức tăng/giảm mỗi nhịp 33ms
 
 const char* RANDOM_TOPIC = "diorama/imodel/random";
 // Topic trạng thái online/offline của board: retained "1" khi kết nối,
@@ -74,14 +77,13 @@ volatile uint8_t pwmCounter          = 0;
 hw_timer_t*      pwmTimer            = nullptr;
 uint8_t          gammaLUT[256]       = {0};        // mức cảm nhận 0..255 -> duty 0..PWM_LEVELS
 
-// Hiệu ứng random ("thành phố về đêm")
+// Hiệu ứng random ("thành phố về đêm"): mỗi chu kỳ 8s chọn ngẫu nhiên một nhóm
+// nhà sáng (nhà còn lại tắt), fade mượt sang nhóm mới rồi giữ nguyên tới chu kỳ kế.
 bool          randomMode      = false;
 unsigned long lastAnim        = 0;
-uint8_t       animPhase[BITS_PER_HOUSE] = {0};    // 0 OFF_HOLD,1 FADE_IN,2 ON_HOLD,3 FADE_OUT
-uint8_t       animLevel[BITS_PER_HOUSE] = {0};    // mức cảm nhận hiện tại 0..255
-uint8_t       animPeak [BITS_PER_HOUSE] = {0};    // mức sáng đỉnh ngẫu nhiên
-uint8_t       animSpeed[BITS_PER_HOUSE] = {0};    // tốc độ fade
-unsigned long animHold [BITS_PER_HOUSE] = {0};    // mốc thời gian hết giữ
+unsigned long animNextCycle   = 0;                  // mốc millis() đổi nhóm nhà kế tiếp
+uint8_t       animLevel [BITS_PER_HOUSE] = {0};     // mức cảm nhận hiện tại 0..255
+uint8_t       animTarget[BITS_PER_HOUSE] = {0};     // mức đích chu kỳ này: 0 (tắt) hoặc 255 (sáng)
 
 // ─── Shift-register output (bit-bang, an toàn trong ISR) ─────────
 // Ghi trực tiếp thanh ghi GPIO (atomic set/clear) -> dùng được cả trong ISR.
@@ -147,48 +149,36 @@ void applyLandscape() {
 
 // ─── Hiệu ứng random ────────────────────────────────────────────
 
+// Chọn nhóm nhà mới cho chu kỳ kế: mỗi nhà 50% sáng / 50% tắt, sáng hết cỡ như nhau.
+void animPickGroup() {
+  for (int i = 0; i < houseBitCount; i++)
+    animTarget[i] = random(0, 2) ? 255 : 0;
+}
+
 void animInit() {
-  unsigned long now = millis();
-  for (int i = 0; i < houseBitCount; i++) {
-    animPhase[i] = 0;                       // OFF_HOLD
-    animLevel[i] = 0;
-    bri[i]       = 0;
-    animHold[i]  = now + random(0, 1600);   // lệch pha để "thành phố" sáng dần
-    animPeak[i]  = random(150, 256);
-    animSpeed[i] = random(3, 9);
-  }
+  // Xuất phát từ trạng thái đèn hiện tại (ngoài random duty chỉ có 0 hoặc 64)
+  // để vào random là fade êm sang nhóm đầu tiên, không tắt phụt toàn bộ.
+  for (int i = 0; i < houseBitCount; i++)
+    animLevel[i] = bri[i] ? 255 : 0;
   for (int i = houseBitCount; i < BITS_PER_HOUSE; i++) bri[i] = 0; // bit không phải nhà: tắt
+  animPickGroup();
+  animNextCycle = millis() + ANIM_CYCLE_MS;
   applyLandscape();                         // cảnh quan giữ nguyên trạng thái
 }
 
 void animStep() {
   unsigned long now = millis();
+  if ((long)(now - animNextCycle) >= 0) {   // hết chu kỳ: đổi sang nhóm nhà khác
+    animPickGroup();
+    animNextCycle = now + ANIM_CYCLE_MS;
+  }
+  // Fade đều (~2s) mỗi nhà về mức đích của chu kỳ hiện tại rồi giữ nguyên ở đó.
   for (int i = 0; i < houseBitCount; i++) {
-    switch (animPhase[i]) {
-      case 0: // OFF_HOLD
-        if ((long)(now - animHold[i]) >= 0) {
-          animPhase[i] = 1;
-          animPeak[i]  = random(150, 256);
-          animSpeed[i] = random(3, 9);
-        }
-        break;
-      case 1: { // FADE_IN
-        int v = animLevel[i] + animSpeed[i];
-        if (v >= animPeak[i]) { v = animPeak[i]; animPhase[i] = 2; animHold[i] = now + random(600, 3500); }
-        animLevel[i] = v;
-        break;
-      }
-      case 2: // ON_HOLD
-        if ((long)(now - animHold[i]) >= 0) { animPhase[i] = 3; animSpeed[i] = random(2, 7); }
-        break;
-      case 3: { // FADE_OUT
-        int v = animLevel[i] - animSpeed[i];
-        if (v <= 0) { v = 0; animPhase[i] = 0; animHold[i] = now + random(500, 4500); }
-        animLevel[i] = v;
-        break;
-      }
-    }
-    bri[i] = gammaLUT[animLevel[i]];
+    int v = animLevel[i];
+    if (v < animTarget[i])      { v += ANIM_FADE_STEP; if (v > animTarget[i]) v = animTarget[i]; }
+    else if (v > animTarget[i]) { v -= ANIM_FADE_STEP; if (v < animTarget[i]) v = animTarget[i]; }
+    animLevel[i] = v;
+    bri[i] = gammaLUT[v];
   }
 }
 
@@ -199,6 +189,8 @@ void setRandomMode(bool on) {
   randomMode = on;
   if (on) {
     Serial.println(">> RANDOM mode ON");
+    // Cảnh quan không nằm trong hiệu ứng random, nhưng mặc định bật sáng khi random chạy.
+    if (boardAddr == 1) houseState |= (1ULL << LANDSCAPE_BIT);
     animInit();
   } else {
     Serial.println(">> RANDOM mode OFF");
@@ -245,8 +237,14 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
 
   Serial.printf(">> [house_%d] = %llu\n", boardAddr, state);
   houseState = state;
-  if (randomMode) applyLandscape();      // đang random: chỉ giữ cảnh quan, nhà vẫn tự chạy
-  else            setBriFromMask(houseState);
+  if (randomMode) {
+    // Đang random: landscape mặc định bật — retained mask cũ (chụp trước lúc bật
+    // random) được broker gửi lại khi reconnect không được phép tắt nó.
+    if (boardAddr == 1) houseState |= (1ULL << LANDSCAPE_BIT);
+    applyLandscape();                    // nhà vẫn do hiệu ứng tự chạy
+  } else {
+    setBriFromMask(houseState);
+  }
   printBuffer();
 }
 
@@ -422,6 +420,13 @@ void setup() {
     }
   }
   houseBitCount = (boardAddr == 0) ? 40 : 18;
+
+  // Mặc định sáng TẤT CẢ từ lúc boot: nếu không nối được broker (mất internet,
+  // router chưa lên...) diorama vẫn sáng thay vì tối. Khi MQTT kết nối, retained
+  // state từ broker sẽ ghi đè ngay nên không phá vỡ mô hình "broker là nguồn chân lý".
+  houseState = (1ULL << houseBitCount) - 1;                      // mọi bit nhà của board này
+  if (boardAddr == 1) houseState |= (1ULL << LANDSCAPE_BIT);     // + cảnh quan (board 1)
+  setBriFromMask(houseState);
 
   snprintf(myTopic, sizeof(myTopic), "diorama/imodel/house_%d", boardAddr);
   snprintf(statusTopic, sizeof(statusTopic), "diorama/imodel/status_%d", boardAddr);
